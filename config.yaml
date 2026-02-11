@@ -1,0 +1,231 @@
+# config.yaml - 体育动作评估系统全局配置
+
+# ==================== 摄像头配置 ====================
+camera:
+  position: "front"           # 固定正面视角
+  height: 1.5                 # 摄像头高度（米）
+  distance: 3.0               # 摄像头到运动区域距离（米）
+  resolution: [1920, 1080]    # 分辨率
+  fps: 30
+
+# ==================== 骨骼配置 ====================
+skeleton:
+  joint_names: [
+    'nose', 'left_eye', 'right_eye', 'left_ear', 'right_ear',
+    'left_shoulder', 'right_shoulder', 'left_elbow', 'right_elbow',
+    'left_wrist', 'right_wrist', 'left_hip', 'right_hip',
+    'left_knee', 'right_knee', 'left_ankle', 'right_ankle'
+  ]
+  num_joints: 17
+  target_frames: 60           # 固定输入帧数
+
+# ==================== 动作定义 ====================
+actions:
+  # -------- 俯卧撑 --------
+  pushup:
+    name: "俯卧撑"
+    category: "strength"      # 力量类
+    num_phases: 5
+    phases: ["ready", "down", "bottom", "up", "finish"]
+    phase_names_cn: ["准备", "下降", "最低点", "上升", "完成"]
+    standard_params:
+      bottom_elbow_angle: {min: 70, max: 90, ideal: 90, weight: 0.3}      # 度
+      body_straightness: {min: 160, max: 180, ideal: 180, weight: 0.25}   # 肩-髋-踝角度
+      speed_down: {min: 0.5, max: 2.0, ideal: 1.0, weight: 0.2}          # 秒
+      speed_up: {min: 0.5, max: 2.0, ideal: 1.0, weight: 0.2}            # 秒
+      shoulder_alignment: {min: 0, max: 10, ideal: 0, weight: 0.05}      # 肩部下沉偏差
+    common_errors:
+      - {name: "塌腰", code: "hip_sag", check: "hip_sag", threshold: 0.15, severity: "major"}
+      - {name: "撅臀", code: "hip_pike", check: "hip_pike", threshold: 0.15, severity: "major"}
+      - {name: "肘外扩", code: "elbow_flare", check: "elbow_flare", threshold: 30, severity: "minor"}
+      - {name: "未达深度", code: "shallow_depth", check: "shallow_depth", threshold: 90, severity: "critical"}
+      - {name: "耸肩", code: "shoulder_shrug", check: "shoulder_shrug", threshold: 0.1, severity: "minor"}
+    joints_focus: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]  # 主要关注关节
+    count_method: "cycle"     # 计数方式：完整周期
+
+  # -------- 深蹲 --------
+  squat:
+    name: "深蹲"
+    category: "strength"
+    num_phases: 5
+    phases: ["standing", "descent", "bottom", "ascent", "lockout"]
+    phase_names_cn: ["站立", "下降", "最低点", "上升", "锁定"]
+    standard_params:
+      depth_knee_angle: {min: 70, max: 90, ideal: 90, weight: 0.35}       # 膝角
+      knee_toe_alignment: {min: 0, max: 10, ideal: 0, weight: 0.2}        # 膝盖与脚尖偏差角度
+      back_angle: {min: 45, max: 90, ideal: 60, weight: 0.15}             # 躯干前倾角度
+      hip_depth: {min: 0, max: 0.1, ideal: 0, weight: 0.2}                # 髋低于膝（达标）
+      speed_symmetry: {min: 0.8, max: 1.2, ideal: 1.0, weight: 0.1}       # 升降速度比
+    common_errors:
+      - {name: "膝盖内扣", code: "knee_collapse", check: "knee_collapse", threshold: 10, severity: "critical"}
+      - {name: "重心前移", code: "forward_lean", check: "forward_lean", threshold: 0.2, severity: "major"}
+      - {name: "未达深度", code: "shallow_squat", check: "shallow_squat", threshold: 100, severity: "critical"}
+      - {name: "踮脚尖", code: "heel_lift", check: "heel_lift", threshold: 0.05, severity: "major"}
+      - {name: "圆背", code: "rounded_back", check: "rounded_back", threshold: 30, severity: "minor"}
+    joints_focus: [5, 6, 11, 12, 13, 14, 15, 16]
+    count_method: "cycle"
+
+  # -------- 仰卧起坐 --------
+  situp:
+    name: "仰卧起坐"
+    category: "strength"
+    num_phases: 5
+    phases: ["lying", "up", "touch", "down", "back"]
+    phase_names_cn: ["平躺", "起坐", "触膝", "下放", "回落"]
+    standard_params:
+      up_angle: {min: 30, max: 45, ideal: 45, weight: 0.3}                # 起坐角度
+      touch_position: {min: 0, max: 0.1, ideal: 0, weight: 0.3}           # 肘膝距离（米）
+      down_control: {min: 1.0, max: 3.0, ideal: 1.5, weight: 0.2}         # 下放时间（秒）
+      hip_stability: {min: 0, max: 0.05, ideal: 0, weight: 0.2}           # 臀部稳定性
+    common_errors:
+      - {name: "借力拉头", code: "pull_head", check: "pull_head", threshold: 0.1, severity: "major"}
+      - {name: "臀部离地", code: "hip_lift", check: "hip_lift", threshold: 0.05, severity: "critical"}
+      - {name: "未触膝", code: "no_touch", check: "no_touch", threshold: 0.15, severity: "critical"}
+      - {name: "借助惯性", code: "momentum", check: "momentum", threshold: 0.2, severity: "minor"}
+    joints_focus: [0, 5, 6, 9, 10, 11, 12]
+    count_method: "cycle"
+
+  # -------- 跳绳 --------
+  jump_rope:
+    name: "跳绳"
+    category: "cardio"        # 有氧类
+    num_phases: 4
+    phases: ["prep", "jump", "air", "land"]
+    phase_names_cn: ["准备", "起跳", "腾空", "落地"]
+    standard_params:
+      jump_height: {min: 0.03, max: 0.15, ideal: 0.08, weight: 0.2}       # 腾空高度（归一化）
+      landing_softness: {min: 15, max: 45, ideal: 30, weight: 0.25}       # 落地膝角变化
+      rhythm_regularity: {min: 0, max: 0.2, ideal: 0, weight: 0.3}        # 跳跃间隔变异系数
+      arm_symmetry: {min: 0.8, max: 1.2, ideal: 1.0, weight: 0.15}        # 双臂对称性
+      wrist_rotation: {min: 0.5, max: 2.0, ideal: 1.0, weight: 0.1}       # 手腕转动幅度
+    common_errors:
+      - {name: "全脚掌落地", code: "flat_foot", check: "flat_foot", threshold: 0.8, severity: "minor"}
+      - {name: "膝盖过直", code: "stiff_knee", check: "stiff_knee", threshold: 10, severity: "major"}
+      - {name: "节奏不稳", code: "irregular_rhythm", check: "irregular_rhythm", threshold: 0.3, severity: "major"}
+      - {name: "跳跃过高", code: "high_jump", check: "high_jump", threshold: 0.2, severity: "minor"}
+      - {name: "手臂外展", code: "arm_flare", check: "arm_flare", threshold: 30, severity: "minor"}
+    joints_focus: [5, 6, 7, 8, 9, 10, 13, 14, 15, 16]
+    count_method: "repetition"  # 重复次数
+
+  # -------- 跳远 --------
+  long_jump:
+    name: "跳远"
+    category: "power"         # 爆发力类
+    num_phases: 4
+    phases: ["runup", "takeoff", "flight", "landing"]
+    phase_names_cn: ["助跑", "起跳", "腾空", "落地"]
+    standard_params:
+      takeoff_angle: {min: 15, max: 25, ideal: 20, weight: 0.25}          # 起跳角度
+      takeoff_knee_angle: {min: 120, max: 160, ideal: 140, weight: 0.25}  # 起跳膝角
+      arm_swing: {min: 0.3, max: 0.6, ideal: 0.45, weight: 0.2}           # 摆臂幅度
+      landing_balance: {min: 0, max: 0.15, ideal: 0, weight: 0.2}         # 落地稳定性
+      flight_posture: {min: 160, max: 180, ideal: 180, weight: 0.1}       # 腾空身体姿态
+    common_errors:
+      - {name: "起跳角度过大", code: "steep_takeoff", check: "steep_takeoff", threshold: 30, severity: "major"}
+      - {name: "起跳角度过小", code: "shallow_takeoff", check: "shallow_takeoff", threshold: 15, severity: "major"}
+      - {name: "未充分摆臂", code: "poor_arm_swing", check: "poor_arm_swing", threshold: 0.2, severity: "minor"}
+      - {name: "落地不稳", code: "unstable_landing", check: "unstable_landing", threshold: 0.15, severity: "major"}
+      - {name: "身体后仰", code: "lean_back", check: "lean_back", threshold: 30, severity: "minor"}
+    joints_focus: [0, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    count_method: "single"    # 单次动作
+
+  # -------- 引体向上 --------
+  pullup:
+    name: "引体向上"
+    category: "strength"
+    num_phases: 5
+    phases: ["hang", "pull", "chin_over", "lower", "finish"]
+    phase_names_cn: ["悬垂", "上拉", "过杆", "下放", "完成"]
+    standard_params:
+      chin_height: {min: 0, max: 0.05, ideal: 0, weight: 0.35}              # 下巴过杆高度
+      arm_extension: {min: 160, max: 180, ideal: 180, weight: 0.3}          # 手臂伸直角度
+      body_swing: {min: 0, max: 10, ideal: 0, weight: 0.2}                  # 身体摆动幅度
+      pull_speed: {min: 1.0, max: 3.0, ideal: 2.0, weight: 0.15}            # 上拉时间（秒）
+    common_errors:
+      - {name: "未过杆", code: "chin_below", check: "chin_below", threshold: 0.05, severity: "critical"}
+      - {name: "未充分下放", code: "short_hang", check: "short_hang", threshold: 150, severity: "critical"}
+      - {name: "身体摆动", code: "body_swing", check: "body_swing", threshold: 15, severity: "major"}
+      - {name: "蹬腿借力", code: "kicking", check: "kicking", threshold: 0.1, severity: "major"}
+      - {name: "耸肩", code: "shoulder_shrug", check: "shoulder_shrug", threshold: 0.1, severity: "minor"}
+    joints_focus: [0, 5, 6, 7, 8, 9, 10, 11, 12]
+    count_method: "cycle"
+
+# ==================== 训练配置 ====================
+training:
+  device: "cuda"              # 训练设备: cuda / cpu
+  seed: 42                    # 随机种子
+  
+  action_model:
+    epochs: 100
+    batch_size: 64
+    lr: 0.001
+    weight_decay: 0.0001
+    scheduler: "cosine"
+    label_smoothing: 0.1
+    
+  phase_model:
+    epochs: 80
+    batch_size: 32
+    lr: 0.001
+    weight_decay: 0.0001
+    scheduler: "cosine"
+    
+  quality_model:
+    epochs: 60
+    batch_size: 32
+    lr: 0.0005
+    weight_decay: 0.0001
+    scheduler: "cosine"
+
+# ==================== 路径配置 ====================
+paths:
+  raw_videos: "data/raw_videos"
+  skeletons: "data/skeletons"
+  annotations: "data/annotations"
+  processed: "data/processed"
+  checkpoints: "checkpoints"
+  deploy: "deploy"
+
+# ==================== 评估配置 ====================
+assessment:
+  score_thresholds:
+    excellent: 90             # 优秀
+    good: 80                  # 良好
+    pass: 60                  # 及格
+    fail: 0                   # 不及格
+  
+  scoring_weights:
+    accuracy: 0.4             # 准确性权重
+    stability: 0.3            # 稳定性权重
+    standard: 0.2             # 标准性权重
+    safety: 0.1               # 安全性权重
+
+# ==================== 错误类型映射 ====================
+error_types:
+  - "塌腰"
+  - "撅臀"
+  - "肘外扩"
+  - "未达深度"
+  - "膝盖内扣"
+  - "重心前移"
+  - "借力拉头"
+  - "节奏不稳"
+  - "耸肩"
+  - "踮脚尖"
+  - "圆背"
+  - "臀部离地"
+  - "未触膝"
+  - "借助惯性"
+  - "全脚掌落地"
+  - "膝盖过直"
+  - "跳跃过高"
+  - "手臂外展"
+  - "起跳角度过大"
+  - "起跳角度过小"
+  - "未充分摆臂"
+  - "落地不稳"
+  - "身体后仰"
+  - "未过杆"
+  - "未充分下放"
+  - "身体摆动"
+  - "蹬腿借力"

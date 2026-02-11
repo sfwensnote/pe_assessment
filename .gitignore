@@ -1,0 +1,150 @@
+# ============================================
+# Python
+# ============================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# ============================================
+# Virtual Environments
+# ============================================
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.python-version
+
+# ============================================
+# IDEs & Editors
+# ============================================
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+*.sublime-project
+*.sublime-workspace
+
+# ============================================
+# Jupyter Notebook
+# ============================================
+.ipynb_checkpoints
+*.ipynb
+
+# ============================================
+# Model Files (Large files)
+# ============================================
+*.pt
+*.pth
+*.onnx
+*.tflite
+*.engine
+*.mlmodel
+*.mlpackage
+*.torchscript
+*.paddle
+checkpoints/*
+!checkpoints/.gitkeep
+
+# Pre-trained weights
+yolov8*.pt
+yolov5*.pt
+yolo11*.pt
+
+# ============================================
+# Data Files
+# ============================================
+# Raw videos (too large for git)
+data/videos/*
+!data/videos/.gitkeep
+
+# Skeleton data (can be regenerated)
+data/skeletons/*
+!data/skeletons/.gitkeep
+
+# Annotations (if auto-generated, uncomment if manual)
+# data/annotations/*
+# !data/annotations/.gitkeep
+
+# Temporary/Cache data
+data/temp/
+data/cache/
+
+# ============================================
+# Logs & Outputs
+# ============================================
+logs/
+*.log
+runs/
+output/
+results/
+wandb/
+output_*/
+
+# ============================================
+# Testing & Coverage
+# ============================================
+.tox/
+.nox/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# ============================================
+# Deployment
+# ============================================
+deploy/models/*
+!deploy/models/.gitkeep
+*.zip
+*.tar.gz
+*.tar
+
+# ============================================
+# OS Generated
+# ============================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ============================================
+# Project Specific
+# ============================================
+# Local configuration overrides
+config.local.yaml
+config.override.yaml
+
+# Temporary files
+*.tmp
+*.bak
+*.orig
