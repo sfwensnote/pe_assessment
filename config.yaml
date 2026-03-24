@@ -186,6 +186,62 @@ paths:
   checkpoints: "checkpoints"
   deploy: "deploy"
 
+# ==================== 自动采集配置 ====================
+ingest:
+  provider: "pexels"
+
+  pexels:
+    base_url: "https://api.pexels.com/videos/search"
+    locale: "zh-CN"
+    per_page: 15
+    max_pages_per_query: 4
+    request_interval_sec: 2.2
+    request_jitter_sec: 0.6
+    timeout_sec: 30
+    orientation: "landscape"
+
+  run_policy:
+    target_per_action: 120
+    max_new_per_action_per_run: 12
+    max_new_total_per_run: 72
+
+  quality_gate:
+    min_width: 720
+    min_height: 480
+    min_duration_sec: 6
+    max_duration_sec: 30
+    min_filesize_bytes: 800000
+    pose_probe:
+      enabled: true
+      strict: false
+      model: "yolov8x-pose.pt"
+      sample_frames: 12
+      keypoint_conf_threshold: 0.25
+      min_person_frame_ratio: 0.60
+      min_single_person_ratio: 0.65
+      min_avg_visible_keypoints: 8
+      min_primary_person_area_ratio: 0.02
+
+  actions:
+    pushup:
+      queries: ["俯卧撑"]
+      keywords: ["push-up", "push-ups", "pushup", "push ups"]
+    squat:
+      queries: ["深蹲"]
+      keywords: ["squat", "squats"]
+    situp:
+      queries: ["仰卧起坐"]
+      keywords: ["sit-up", "sit-ups", "situp", "sit ups", "crunch"]
+    jump_rope:
+      queries: ["跳绳"]
+      keywords: ["jump-rope", "jumping-rope", "skipping-rope", "rope"]
+    long_jump:
+      queries: ["跳远"]
+      keywords: ["long-jump", "broad-jump", "athlete-jumping", "jumping"]
+    pullup:
+      queries: ["引体向上"]
+      keywords: ["pull-up", "pull-ups", "pullup", "chin-up", "chin-ups"]
+
 # ==================== 评估配置 ====================
 assessment:
   score_thresholds:

@@ -39,6 +39,12 @@ onnxruntime==1.16.3
 # GUI工具（人工复核）
 tkinter-tooltip==2.1.0
 
+# 实时服务
+fastapi==0.115.6
+uvicorn[standard]==0.32.1
+websockets==13.1
+python-multipart==0.0.20
+
 # 开发工具
 pytest==7.4.3
 black==23.11.0

@@ -1,0 +1,106 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
+WEB_DIR="$PROJECT_ROOT/web"
+
+BACKEND_PORT="${PAECNU_BACKEND_PORT:-8001}"
+FRONTEND_PORT="${PAECNU_FRONTEND_PORT:-5173}"
+
+is_port_busy() {
+  local port="$1"
+  if command -v lsof >/dev/null 2>&1; then
+    lsof -ti tcp:"$port" >/dev/null 2>&1
+    return $?
+  fi
+  return 1
+}
+
+if [ -x "$PROJECT_ROOT/.venv/bin/python" ]; then
+  PYTHON_BIN="$PROJECT_ROOT/.venv/bin/python"
+elif command -v python3 >/dev/null 2>&1; then
+  PYTHON_BIN="$(command -v python3)"
+elif command -v python >/dev/null 2>&1; then
+  PYTHON_BIN="$(command -v python)"
+else
+  echo "未找到 Python，请先安装 Python 3。"
+  exit 1
+fi
+
+if ! command -v npm >/dev/null 2>&1; then
+  echo "未找到 npm，请先安装 Node.js (包含 npm)。"
+  exit 1
+fi
+
+if ! "$PYTHON_BIN" -m uvicorn --version >/dev/null 2>&1; then
+  echo "当前 Python 环境缺少 uvicorn。请先运行:"
+  echo "  $PYTHON_BIN -m pip install -r requirements.txt"
+  exit 1
+fi
+
+if is_port_busy "$BACKEND_PORT"; then
+  echo "后端端口 ${BACKEND_PORT} 已被占用，请先释放端口或设置 PAECNU_BACKEND_PORT。"
+  exit 1
+fi
+
+if is_port_busy "$FRONTEND_PORT"; then
+  echo "前端端口 ${FRONTEND_PORT} 已被占用，请先释放端口或设置 PAECNU_FRONTEND_PORT。"
+  exit 1
+fi
+
+if [ ! -d "$WEB_DIR/node_modules" ]; then
+  echo "首次启动，正在安装前端依赖..."
+  npm install --prefix "$WEB_DIR"
+fi
+
+BACKEND_PID=""
+FRONTEND_PID=""
+
+cleanup() {
+  if [ -n "$BACKEND_PID" ] && kill -0 "$BACKEND_PID" >/dev/null 2>&1; then
+    kill "$BACKEND_PID" >/dev/null 2>&1 || true
+  fi
+  if [ -n "$FRONTEND_PID" ] && kill -0 "$FRONTEND_PID" >/dev/null 2>&1; then
+    kill "$FRONTEND_PID" >/dev/null 2>&1 || true
+  fi
+}
+
+trap cleanup EXIT INT TERM
+
+echo "正在启动后端服务 http://127.0.0.1:${BACKEND_PORT} ..."
+(
+  cd "$PROJECT_ROOT"
+  exec "$PYTHON_BIN" -m uvicorn app.main:app --host 127.0.0.1 --port "$BACKEND_PORT" --reload
+) &
+BACKEND_PID=$!
+
+echo "正在启动前端服务 http://127.0.0.1:${FRONTEND_PORT} ..."
+(
+  cd "$WEB_DIR"
+  exec npm run dev -- --host 127.0.0.1 --port "$FRONTEND_PORT"
+) &
+FRONTEND_PID=$!
+
+echo ""
+echo "项目已启动："
+echo "- 前端: http://127.0.0.1:${FRONTEND_PORT}"
+echo "- 后端: http://127.0.0.1:${BACKEND_PORT}"
+echo "按 Ctrl+C 可同时停止前后端。"
+echo ""
+
+while true; do
+  if ! kill -0 "$BACKEND_PID" >/dev/null 2>&1; then
+    wait "$BACKEND_PID" >/dev/null 2>&1 || true
+    echo "后端进程已退出，正在关闭其余进程..."
+    break
+  fi
+
+  if ! kill -0 "$FRONTEND_PID" >/dev/null 2>&1; then
+    wait "$FRONTEND_PID" >/dev/null 2>&1 || true
+    echo "前端进程已退出，正在关闭其余进程..."
+    break
+  fi
+
+  sleep 1
+done

@@ -1,0 +1,6 @@
+# 每天 09:00 与 21:00 自动采集并编排处理
+0 9,21 * * * cd /path/to/pe_assessment && \
+PEXELS_API_KEY=your_api_key python 8_ingest_pipeline.py >> logs/ingest_cron.log 2>&1
+
+# 使用下面命令实时查看状态
+# cd /path/to/pe_assessment && python 8_ingest_monitor.py --watch

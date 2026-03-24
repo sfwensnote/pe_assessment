@@ -91,6 +91,10 @@ data/skeletons/*
 # Temporary/Cache data
 data/temp/
 data/cache/
+data/processed/temp_uploads/
+data/processed/realtime_reports/
+data/processed/ingest/*
+!data/processed/ingest/.gitkeep
 
 # ============================================
 # Logs & Outputs
@@ -148,3 +152,7 @@ config.override.yaml
 *.tmp
 *.bak
 *.orig
+
+# Frontend build artifacts
+web/node_modules/
+web/dist/
