@@ -1,451 +1,226 @@
 # 体育动作智能评估系统
 
-基于深度学习的体育动作识别与质量评估系统，支持俯卧撑、深蹲、跳绳、跳远、引体向上、仰卧起坐等多种体育运动。
+`pe_assessment` 是一个面向体育动作教学、训练评估和视频分析的完整项目，覆盖数据采集、骨架提取、自动标注、人工复核、模型训练、离线推理、实时评估和前后端部署。当前支持 6 类动作：
 
-## 功能特性
+- `pushup` 俯卧撑
+- `squat` 深蹲
+- `situp` 仰卧起坐
+- `jump_rope` 跳绳
+- `long_jump` 跳远
+- `pullup` 引体向上
 
-- **动作识别**: 自动识别6种体育动作类型
-- **阶段分割**: 精确划分动作的各个阶段
-- **质量评估**: 多维度评估动作质量（0-100分）
-- **错误检测**: 自动检测常见动作错误
-- **实时评估**: 支持视频实时分析
+项目后端使用 `FastAPI + PyTorch`，前端使用 `React + TypeScript + Vite`，全局运行配置集中在 [`config.yaml`](./config.yaml)。
 
-## 支持的运动类型
+## 1. 当前仓库定位
 
-| 动作 | 英文标识 | 支持功能 |
-|------|---------|---------|
-| 俯卧撑 | pushup | 识别/阶段/评估/错误检测 |
-| 深蹲 | squat | 识别/阶段/评估/错误检测 |
-| 仰卧起坐 | situp | 识别/阶段/评估/错误检测 |
-| 跳绳 | jump_rope | 识别/阶段/评估/错误检测 |
-| 跳远 | long_jump | 识别/阶段/评估/错误检测 |
-| 引体向上 | pullup | 识别/阶段/评估/错误检测 |
+本仓库保存的是源码、脚本、配置与文档，不包含大体积训练数据、原始视频、运行缓存和模型权重二进制。
 
-## 项目结构
+如果你希望本地完整跑通，需要自行准备或放置：
 
-```
+- `checkpoints/` 下的模型权重
+- `data/raw_videos/` 下的原始视频
+- `data/annotations/` 下的标注文件
+
+默认运行时会优先尝试加载：
+
+- `checkpoints/mixed_best_bundle/action_model_best.pth`
+- `checkpoints/mixed_best_bundle/action_model_rf.joblib`
+- `checkpoints/mixed_best_bundle/phase_model_*.pth`
+- `checkpoints/mixed_best_bundle/quality_model_best.pth`
+
+如果 `mixed_best_bundle` 不存在，则回退到 `checkpoints/` 根目录。
+
+## 2. 核心能力
+
+- 动作识别：支持自动识别 6 类动作
+- 阶段分割：按动作输出阶段标签
+- 质量评估：输出动作质量分、错误项与纠正建议
+- 离线推理：上传视频后返回整体评估结果
+- 实时训练：浏览器摄像头逐帧发送，后端通过 WebSocket 返回实时反馈
+- 运维观测：提供健康检查、系统总览、管理员概览、后台任务列表和实时报告
+- 数据管线：内置预处理、自动标注、复核、训练、打包和验证脚本
+
+## 3. 项目结构
+
+```text
 pe_assessment/
-├── config.yaml                 # 全局配置文件
-├── requirements.txt            # 依赖列表
-├── README.md                   # 项目说明
-│
-├── utils/                      # 工具模块
-│   ├── __init__.py
-│   ├── skeleton.py             # 骨骼数据处理
-│   ├── models.py               # 深度学习模型
-│   ├── augmentation.py         # 数据增强
-│   └── metrics.py              # 评估指标
-│
-├── data/                       # 数据目录
-│   ├── raw_videos/             # 原始视频
-│   ├── skeletons/              # 骨骼数据
-│   ├── annotations/            # 标注数据
-│   └── processed/              # 处理后数据
-│
-├── checkpoints/                # 模型检查点
-│   ├── action_model_best.pth
-│   ├── phase_model_*.pth
-│   └── quality_model_best.pth
-│
-├── deploy/                     # 部署包
-│   ├── models/                 # 导出模型
-│   └── inference_onnx.py       # 部署推理脚本
-│
-└── 脚本文件
-    ├── 0_preprocess_videos.py  # 视频预处理
-    ├── 1_auto_annotate.py      # 自动标注
-    ├── 2_review_annotations.py # 人工复核（GUI）
-    ├── 3_train_action.py       # 训练动作识别模型
-    ├── 4_train_phase.py        # 训练阶段分割模型
-    ├── 5_train_quality.py      # 训练质量评估模型
-    ├── 6_inference.py          # 推理测试
-    └── 7_export_model.py       # 模型导出
+├── app/                          # FastAPI 服务与实时推理逻辑
+├── checkpoints/                  # 本地模型权重目录（默认不入库）
+├── data/                         # 原始数据、标注、处理产物（默认不入库）
+├── deploy/                       # 启动脚本与部署相关文件
+├── docs/                         # 中文专题文档
+├── utils/                        # 骨架处理、模型、指标、增强等核心工具
+├── web/                          # React 前端
+├── 0_preprocess_videos.py        # 视频 -> 骨架关键点
+├── 1_auto_annotate.py            # 自动标注
+├── 2_review_annotations.py       # 人工复核
+├── 3_train_action.py             # 动作识别训练
+├── 4_train_phase.py              # 阶段模型训练
+├── 5_train_quality.py            # 质量模型训练
+├── 6_inference.py                # 离线推理
+├── 7_export_model.py             # 模型导出
+├── 8_ingest_pipeline.py          # 自动采集与入库
+├── 8_ingest_monitor.py           # 入库监控
+├── 9_tag_and_cleanup_videos.py   # 标签与清理
+├── config.yaml                   # 全局配置
+└── quick_test.py                 # 环境快速检查
 ```
 
-## 快速开始
+## 4. 快速开始
 
-### 1. 安装依赖
+### 4.1 准备环境
 
-```bash
-pip install -r requirements.txt
-```
+Windows：
 
-### 2. 准备数据
-
-将视频按动作类型放入对应目录：
-
-```bash
-mkdir -p data/raw_videos/{pushup,squat,situp,jump_rope,long_jump,pullup}
-
-# 复制视频文件
-cp pushup_001.mp4 data/raw_videos/pushup/
-cp squat_001.mp4 data/raw_videos/squat/
-# ... 其他动作
-```
-
-### 3. 运行完整流程
-
-```bash
-# 1. 提取骨骼关键点
-python 0_preprocess_videos.py
-
-# 2. 自动标注
-python 1_auto_annotate.py
-
-# 3. 人工复核（图形界面，可选但推荐）
-python 2_review_annotations.py
-
-# 4. 训练模型
-python 3_train_action.py        # 动作识别
-python 4_train_phase.py         # 阶段分割
-python 5_train_quality.py       # 质量评估
-
-# 5. 推理测试
-python 6_inference.py --video test.mp4
-
-# 6. 导出部署模型
-python 7_export_model.py
-```
-
-## 使用说明
-
-### 视频预处理
-
-```bash
-# 处理所有动作
-python 0_preprocess_videos.py
-
-# 处理指定动作
-python 0_preprocess_videos.py --action pushup
-
-# 指定输入输出目录
-python 0_preprocess_videos.py --input_dir /path/to/videos --output_dir /path/to/skeletons
-```
-
-### 自动标注
-
-```bash
-# 标注所有动作
-python 1_auto_annotate.py
-
-# 标注指定动作
-python 1_auto_annotate.py --action pushup
-```
-
-### 训练模型
-
-```bash
-# 动作识别模型
-python 3_train_action.py --epochs 100 --batch_size 64
-
-# 阶段分割模型（所有动作）
-python 4_train_phase.py --epochs 80
-
-# 阶段分割模型（指定动作）
-python 4_train_phase.py --action pushup
-
-# 质量评估模型
-python 5_train_quality.py --epochs 60 --batch_size 32
-```
-
-### 推理测试
-
-```bash
-# 自动识别动作
-python 6_inference.py --video test.mp4
-
-# 指定动作类型
-python 6_inference.py --video test.mp4 --action pushup
-
-# 输出JSON格式
-python 6_inference.py --video test.mp4 --format json
-
-# 保存结果和可视化
-python 6_inference.py --video test.mp4 --output result.json --visualize output.mp4
-```
-
-### 模型导出
-
-```bash
-# 导出为ONNX格式
-python 7_export_model.py --format onnx
-
-# 导出为TorchScript格式
-python 7_export_model.py --format torchscript
-```
-
-## 实时摄像头教学（单人版）
-
-项目已提供单人实时训练的前后端骨架，适合本地课堂演示和学生自练。
-
-### 1) 启动后端服务
-
-```bash
+```powershell
+python -m venv .venv
+.venv\Scripts\activate
+python -m pip install -U pip
 python -m pip install -r requirements.txt
-uvicorn app.main:app --reload --port 8001
+python quick_test.py
 ```
 
-可选：为管理员接口启用口令鉴权（建议）
+Linux / macOS：
 
 ```bash
-export ADMIN_TOKEN="your-admin-token"
-uvicorn app.main:app --reload --port 8001
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install -U pip
+python -m pip install -r requirements.txt
+python quick_test.py
 ```
 
-### 2) 启动 React 前端
+### 4.2 启动后端
 
-```bash
+开发方式：
+
+```powershell
+.venv\Scripts\python -m uvicorn app.main:app --host 127.0.0.1 --port 8001
+```
+
+或直接使用脚本：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\deploy\start_backend.ps1
+```
+
+### 4.3 启动前端
+
+```powershell
 cd web
 npm install
 npm run dev
 ```
 
-前端默认访问 `http://127.0.0.1:5173`。
+或使用项目根目录的一键脚本：
 
-说明：当前前端默认直连 `http://127.0.0.1:8001`，可通过 `VITE_API_BASE` 自定义后端地址。
-
-### 3) 实时能力说明
-
-- 浏览器调用摄像头并实时发送帧到后端
-- 后端返回动作阶段、质量分、错误提示、纠正建议
-- 支持镜像预览（更符合前置摄像头使用习惯）
-- 内置简单计次（单人）
-- 会话结束可生成训练报告 JSON
-- 支持上传本地视频并做一次性评估
-- 支持后台任务化视频评估（进度、任务列表、历史）
-- 提供管理员观测接口（模型状态、实时会话、任务统计）
-- 上传采用分块写入（默认单文件上限 300MB），超限会返回 413
-- 上传接口按 IP 频率限制（默认 60 秒内最多 6 次），超限返回 429
-- 上传视频结果支持动作计数（estimated_reps）
-
-### 4) 模型部署说明
-
-- 若只安装依赖不放训练权重，系统仍可运行，但会更多依赖规则评估，准确率有限。
-- 若要完整能力，请将训练产物放在 `checkpoints/` 下：
-  - `action_model_best.pth`
-  - `phase_model_<action>.pth`（可按动作逐个放）
-  - `quality_model_best.pth`
-- `yolov8x-pose.pt` 若本地不存在，Ultralytics 会在首次运行时下载。
-- 自动识别策略：优先动作模型；当模型缺失或置信度偏低时，系统会启用规则兜底识别。
-
-### 5) 主要接口
-
-- `GET /api/health`
-- `GET /api/actions`
-- `POST /api/realtime/session/start`
-- `POST /api/realtime/session/{session_id}/stop`
-- `GET /api/reports/{session_id}`
-- `POST /api/inference/video`
-- `POST /api/inference/video/tasks`（创建后台评估任务）
-- `GET /api/inference/video/tasks`（任务列表 + 历史）
-- `GET /api/inference/video/tasks/{task_id}`（任务详情）
-- `DELETE /api/inference/video/tasks/{task_id}`（删除单条历史）
-- `DELETE /api/inference/video/history`（清空已完成/失败历史）
-- `GET /api/admin/overview`（管理员总览）
-- `GET /api/admin/video_tasks`（管理员任务监控）
-- `GET /api/admin/realtime_reports`（管理员会话报告）
-- `WS /ws/realtime/{session_id}`
-
-管理员接口在配置 `ADMIN_TOKEN` 后需要请求头：`X-Admin-Token: <token>`。
-
-## 自动采集与实时监控（Pexels）
-
-系统已提供“自动载入 -> 部署 -> 运行编排”的脚本，默认流程如下：
-
-1. 采集 6 类动作视频到 `data/raw_videos/<action>/`
-2. 生成部署与巡检脚本到 `deploy/ingest/`
-3. 对新增动作自动执行预处理与自动标注
-
-搜索关键词固定为中文：`俯卧撑 / 深蹲 / 仰卧起坐 / 跳绳 / 跳远 / 引体向上`。
-并默认使用 Pexels `locale=zh-CN` 搜索，避免中文关键词命中偏离。
-为降低“标题不相关”问题，采集脚本会先做链接关键词匹配，再做姿态快速质检。
-
-### 1) 配置 API Key
-
-```bash
-export PEXELS_API_KEY="your_api_key"
+```powershell
+powershell -ExecutionPolicy Bypass -File .\deploy\start_frontend.ps1
 ```
 
-### 2) 执行自动采集编排
+### 4.4 同时启动前后端
 
-```bash
-# 全动作自动编排
-python 8_ingest_pipeline.py
-
-# 指定动作（示例：俯卧撑 + 深蹲）
-python 8_ingest_pipeline.py --actions pushup,squat
-
-# 仅采集，不执行预处理/标注
-python 8_ingest_pipeline.py --no_pipeline
-
-# 若环境证书链异常，可临时加上（不建议长期使用）
-python 8_ingest_pipeline.py --insecure_ssl
-
-# 若你只想调试下载流程（跳过预处理依赖检查）
-python 8_ingest_pipeline.py --no_pipeline --skip_env_check
-
-# 采集后自动打标签+清理垃圾视频
-python 8_ingest_pipeline.py --auto_tag_cleanup
+```powershell
+powershell -ExecutionPolicy Bypass -File .\deploy\start_all.ps1
 ```
 
-建议优先在虚拟环境里执行，避免系统 Python 依赖污染：
+默认地址：
 
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -r requirements.txt
+- 前端：`http://127.0.0.1:5173`
+- 后端：`http://127.0.0.1:8001`
+
+### 4.5 健康检查
+
+```powershell
+curl http://127.0.0.1:8001/api/health
+curl http://127.0.0.1:8001/api/system/overview
 ```
 
-### 3) 实时监控进展
+## 5. 训练与推理主流程
 
-```bash
-# 单次查看
-python 8_ingest_monitor.py
+### 5.1 数据处理
 
-# 持续刷新看板
-python 8_ingest_monitor.py --watch
-
-# 一条命令同时启动编排 + 实时看板
-bash deploy/ingest/run_with_live_monitor.sh
+```powershell
+python 0_preprocess_videos.py
+python 1_auto_annotate.py
+python 2_review_annotations.py --action pushup
 ```
 
-监控数据来源于：`data/processed/ingest/pipeline_state.json`
+### 5.2 模型训练
 
-每次运行都会额外落地一份历史快照：
-
-- `data/processed/ingest/pipeline_state_<run_id>.json`
-- `data/processed/ingest/quality_rejected.jsonl`（被质检淘汰的视频记录）
-
-### 4) 自动部署辅助脚本（由编排脚本自动生成）
-
-- `deploy/ingest/run_ingest_pipeline.sh`
-- `deploy/ingest/watch_ingest_progress.sh`
-- `deploy/ingest/run_with_live_monitor.sh`
-- `deploy/ingest/cron.example`
-
-### 5) 视频打标签与垃圾清理
-
-```bash
-# 仅打标签
-python 9_tag_and_cleanup_videos.py
-
-# 打标签并清理
-python 9_tag_and_cleanup_videos.py --cleanup
-
-# 只预览将被清理的文件
-python 9_tag_and_cleanup_videos.py --cleanup --dry_run
+```powershell
+python 3_train_action.py --epochs 100 --batch_size 64
+python 4_train_phase.py --epochs 80
+python 5_train_quality.py --epochs 60 --batch_size 32
 ```
 
-输出文件：
+### 5.3 模型验证与打包
 
-- `data/processed/ingest/video_tags.jsonl`
-- `data/processed/ingest/cleanup_log.jsonl`
-- `data/processed/ingest/quality_rejected.jsonl`
-
-注意：如果你把 `data/raw_videos` 映射到外接硬盘，运行前请先确认硬盘已挂载；
-否则采集和清理脚本会直接报错并停止。
-
-## 评估指标
-
-### 动作识别
-- **准确率**: 动作分类准确率
-- **每类准确率**: 各动作类型的识别准确率
-
-### 阶段分割
-- **帧级准确率**: 单帧阶段分类准确率
-- **边界F1**: 阶段边界检测F1分数
-- **编辑距离**: 阶段序列相似度
-
-### 质量评估
-- **MAE**: 与人工评分的平均绝对误差
-- **相关性**: 与人工评分的皮尔逊相关系数
-- **错误检测准确率**: 多标签分类准确率
-
-## 可检测的错误类型
-
-### 俯卧撑
-- 塌腰、撅臀、肘外扩、未达深度、耸肩
-
-### 深蹲
-- 膝盖内扣、重心前移、未达深度、踮脚尖、圆背
-
-### 仰卧起坐
-- 借力拉头、臀部离地、未触膝、借助惯性
-
-### 跳绳
-- 全脚掌落地、膝盖过直、节奏不稳、跳跃过高、手臂外展
-
-### 跳远
-- 起跳角度过大/过小、未充分摆臂、落地不稳、身体后仰
-
-### 引体向上
-- 未过杆、未充分下放、身体摆动、蹬腿借力、耸肩
-
-## 配置说明
-
-编辑 `config.yaml` 可以自定义：
-
-- **动作定义**: 阶段数、标准参数、错误类型
-- **训练参数**: 学习率、批次大小、训练轮数
-- **评估阈值**: 各等级分数阈值
-- **路径配置**: 数据目录、输出目录
-
-## 硬件要求
-
-- **训练**: NVIDIA GPU (推荐 RTX 3060 或更高)
-- **推理**: CPU 即可，GPU 加速可选
-- **内存**: 至少 8GB RAM
-- **存储**: 至少 10GB 可用空间
-
-## 注意事项
-
-1. **数据采集**: 建议固定摄像头位置，保持光线充足
-2. **单人场景**: 当前版本针对单人动作设计
-3. **视频质量**: 建议分辨率不低于 720p，帧率 30fps
-4. **标注质量**: 自动标注后建议人工复核以提高模型性能
-
-## 📄 许可证 (License)
-
-本项目采用 **双重许可 (Dual License)** 模式：
-
-### 开源许可：GPL-3.0
-
-适用于 **个人学习、教育研究、非商业用途**
-
-```
-✅ 个人学习/研究：免费
-✅ 学校教学：免费
-✅ 学术论文引用：免费
-✅ 开源项目贡献：免费
-❌ 商业使用必须开源或购买商业授权
+```powershell
+python 6_inference.py --video test.mp4 --format json
+python 7_export_model.py --format onnx
 ```
 
-完整 GPL-3.0 协议见 [LICENSE-GPL](LICENSE-GPL) 或访问 https://www.gnu.org/licenses/gpl-3.0.html
+如果仓库中已经有额外的清单构建和模型组合脚本，也可以继续使用：
 
-### 商业授权
+- `build_training_manifests.py`
+- `build_high_quality_manifests.py`
+- `train_action_rf.py`
+- `build_mixed_best_bundle.py`
+- `validate_high_quality_models.py`
 
-适用于 **企业商用、闭源集成、定制开发**
+## 6. 当前部署状态说明
 
-商业授权权益：
-- 闭源使用，无需公开源代码
+当前系统已经具备完整的本地部署能力，后端提供：
 
+- 健康检查：`/api/health`
+- 系统总览：`/api/system/overview`
+- 离线视频评估：`/api/inference/video`
+- 后台视频任务：`/api/inference/video/tasks`
+- 实时训练会话：`/api/realtime/session/start`
+- 实时 WebSocket：`/ws/realtime/{session_id}`
+- 管理员接口：`/api/admin/*`
 
-**授权方式：** 按年订阅或永久授权，根据使用规模和场景定价
+实时链路中已经加入：
 
-**联系方式：**
-- 微信：Coder建设
-- 邮箱：javpower@163.com
+- 动作识别短时投票与会话锁定
+- 基于角度阈值的实时计数兜底
+- 模型加载状态与部署健康检查
 
----
+当前仍需注意：
 
-##  贡献指南
+- 阶段显示在实时场景里仍然不够稳定
+- 自动识别与评分已经接上训练模型，但模型精度仍有继续提升空间
+- 数据和模型质量是最终效果的主要瓶颈
 
-欢迎提交 Issue 和 Pull Request！
+模型质量提升建议见 [`docs/model_improvement_plan.md`](./docs/model_improvement_plan.md)。
 
-**贡献者协议：** 向本项目提交代码即表示您同意将代码版权归属于本项目，并授权项目维护者在 GPL-3.0 及商业授权下使用您的代码。
+## 7. 文档索引
 
----
+- [`docs/project_overview.md`](./docs/project_overview.md)：项目总览、架构和模块说明
+- [`docs/deployment_guide.md`](./docs/deployment_guide.md)：本地部署、启动方式、健康检查与常见问题
+- [`docs/training_guide.md`](./docs/training_guide.md)：数据、标注、训练、验证、导出全流程
+- [`docs/api_reference.md`](./docs/api_reference.md)：后端接口、WebSocket 协议和联调说明
+- [`docs/model_improvement_plan.md`](./docs/model_improvement_plan.md)：模型质量问题分析与提升路线
+- [`FROM_ZERO_TO_MODELS.md`](./FROM_ZERO_TO_MODELS.md)：从零到模型产出的简版实操清单
+- [`CURRENT_RELEASE_NOTES.md`](./CURRENT_RELEASE_NOTES.md)：当前版本说明与运行建议
 
-**Copyright (c) 2026 Coder建设｜javpower**
+## 8. 仓库提交约定
 
-*让 AI 助力体育教育，科技改变运动未来*
+以下内容默认不提交到 Git：
+
+- `checkpoints/` 下的模型权重
+- `data/raw_videos/` 下的原始视频
+- `data/annotations/` 下的本地标注
+- `data/processed/` 下的运行产物、报告和缓存
+- `.ultralytics/`、`web/dist/`、`web/*.tsbuildinfo`
+
+这样做的原因是：
+
+- 避免仓库被大文件和生成物污染
+- 降低推送失败和克隆缓慢的风险
+- 让仓库聚焦源码、配置和文档
+
+## 9. 许可证
+
+项目中包含 `LICENSE` 与 `LICENSE-GPL`，使用前请结合具体代码与依赖链路确认适用范围。

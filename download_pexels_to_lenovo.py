@@ -13,13 +13,13 @@ import urllib3
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-API_KEY = os.getenv("PEXELS_API_KEY", "").strip()
+API_KEY = "Y8yt8M2F0j3J55hC0uT1pOKjEQQ8A62s8tEAymscAkd1Z5MzaHFqkaGf"
 BASE_URL = "https://api.pexels.com/videos/search"
-TARGET_PER_ACTION = 50
+TARGET_PER_ACTION = 500
 PER_PAGE = 80
 MAX_PAGES = 60
 
-ROOT = Path("/Volumes/Lenovo/pe_assessment_storage/raw_videos")
+ROOT = Path("data/raw_videos")
 ACTIONS: Dict[str, str] = {
     "pushup": "俯卧撑",
     "squat": "深蹲",
@@ -124,7 +124,9 @@ def main() -> None:
                         output_path.unlink(missing_ok=True)
                         continue
                     existing_ids.add(video_id)
-                    print(f"[ok] {action_id}: {count_action_videos(action_dir)}/{TARGET_PER_ACTION}")
+                    print(
+                        f"[ok] {action_id}: {count_action_videos(action_dir)}/{TARGET_PER_ACTION}"
+                    )
                 except Exception as exc:
                     output_path.unlink(missing_ok=True)
                     print(f"[warn] download failed {video_id}: {exc}")

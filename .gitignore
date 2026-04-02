@@ -79,18 +79,22 @@ yolo11*.pt
 # Raw videos (too large for git)
 data/videos/*
 !data/videos/.gitkeep
+data/raw_videos/*
+!data/raw_videos/.gitkeep
 
 # Skeleton data (can be regenerated)
 data/skeletons/*
 !data/skeletons/.gitkeep
 
-# Annotations (if auto-generated, uncomment if manual)
-# data/annotations/*
-# !data/annotations/.gitkeep
+# Annotations (recommended local-only unless explicitly curated for release)
+data/annotations/*
+!data/annotations/.gitkeep
 
 # Temporary/Cache data
 data/temp/
 data/cache/
+data/processed/*
+!data/processed/.gitkeep
 data/processed/temp_uploads/
 data/processed/realtime_reports/
 data/processed/ingest/*
@@ -147,6 +151,9 @@ Thumbs.db
 # Local configuration overrides
 config.local.yaml
 config.override.yaml
+.ultralytics/
+deploy/current_release/
+nul
 
 # Temporary files
 *.tmp
@@ -156,3 +163,4 @@ config.override.yaml
 # Frontend build artifacts
 web/node_modules/
 web/dist/
+web/*.tsbuildinfo

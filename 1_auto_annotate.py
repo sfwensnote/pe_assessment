@@ -19,11 +19,12 @@ from tqdm import tqdm
 
 # 添加项目路径
 sys.path.append(str(Path(__file__).parent))
+from utils.annotation_io import load_json_any, save_json_utf8
 from utils.skeleton import SkeletonProcessor
 
 # 加载配置
 CONFIG_PATH = Path(__file__).parent / "config.yaml"
-with open(CONFIG_PATH) as f:
+with open(CONFIG_PATH, encoding="utf-8") as f:
     CONFIG = yaml.safe_load(f)
 
 
@@ -34,6 +35,30 @@ class AutoAnnotator:
         self.processor = SkeletonProcessor(
             target_frames=CONFIG["skeleton"]["target_frames"]
         )
+
+    @staticmethod
+    def _attach_quality_scores(quality: dict, action_type: str) -> dict:
+        """补齐统一的质量分数字段，兼容训练脚本读取。"""
+        from utils.metrics import compute_scores
+
+        overall_score, details = compute_scores(quality, CONFIG["actions"][action_type])
+        overall_score = float(overall_score)
+        quality["overall_score"] = overall_score
+        quality["details"] = details
+
+        detail_scores = [
+            float(v.get("score", overall_score))
+            for v in details.values()
+            if isinstance(v, dict)
+        ]
+        avg_score = float(np.mean(detail_scores)) if detail_scores else overall_score
+        quality["metric_scores"] = {
+            "accuracy": avg_score,
+            "stability": avg_score,
+            "standard": avg_score,
+            "safety": avg_score,
+        }
+        return quality
 
     def annotate_pushup(self, features: np.ndarray) -> tuple:
         """
@@ -63,14 +88,14 @@ class AutoAnnotator:
         down_threshold = 90
 
         phases[elbow_angles > ready_threshold] = 0  # ready
-        phases[
-            (elbow_angles > down_threshold) & (elbow_angles <= ready_threshold)
-        ] = 1  # down
+        phases[(elbow_angles > down_threshold) & (elbow_angles <= ready_threshold)] = (
+            1  # down
+        )
         phases[elbow_angles <= down_threshold] = 2  # bottom
         phases[(elbow_angles > down_threshold) & (np.arange(T) > bottom_idx)] = 3  # up
-        phases[
-            (elbow_angles > ready_threshold) & (np.arange(T) > bottom_idx)
-        ] = 4  # finish
+        phases[(elbow_angles > ready_threshold) & (np.arange(T) > bottom_idx)] = (
+            4  # finish
+        )
 
         # 质量评估
         quality = {
@@ -92,12 +117,7 @@ class AutoAnnotator:
                 "塌腰" if hip_y[bottom_idx] > np.mean(hip_y) else "撅臀"
             )
 
-        # 计算得分
-        from utils.metrics import compute_scores
-
-        overall_score, details = compute_scores(quality, CONFIG["actions"]["pushup"])
-        quality["overall_score"] = overall_score
-        quality["details"] = details
+        quality = self._attach_quality_scores(quality, "pushup")
 
         return phases.tolist(), quality
 
@@ -120,7 +140,7 @@ class AutoAnnotator:
         phases[bottom_idx + 2 * (T - bottom_idx) // 3 :] = 4  # lockout
 
         # 膝盖内扣检测
-        left_knee_x = features[:, 11, 0]
+        left_knee_x = features[:, 13, 0]
         left_ankle_x = features[:, 15, 0]
         knee_collapse = np.max(np.abs(left_knee_x - left_ankle_x))
 
@@ -136,11 +156,7 @@ class AutoAnnotator:
         if knee_collapse > 0.1:
             quality["errors"].append("膝盖内扣")
 
-        from utils.metrics import compute_scores
-
-        overall_score, details = compute_scores(quality, CONFIG["actions"]["squat"])
-        quality["overall_score"] = overall_score
-        quality["details"] = details
+        quality = self._attach_quality_scores(quality, "squat")
 
         return phases.tolist(), quality
 
@@ -183,11 +199,7 @@ class AutoAnnotator:
         if hip_variance > 0.05:
             quality["errors"].append("臀部离地")
 
-        from utils.metrics import compute_scores
-
-        overall_score, details = compute_scores(quality, CONFIG["actions"]["situp"])
-        quality["overall_score"] = overall_score
-        quality["details"] = details
+        quality = self._attach_quality_scores(quality, "situp")
 
         return phases.tolist(), quality
 
@@ -238,11 +250,7 @@ class AutoAnnotator:
         if rhythm_regularity > 0.3:
             quality["errors"].append("节奏不稳")
 
-        from utils.metrics import compute_scores
-
-        overall_score, details = compute_scores(quality, CONFIG["actions"]["jump_rope"])
-        quality["overall_score"] = overall_score
-        quality["details"] = details
+        quality = self._attach_quality_scores(quality, "jump_rope")
 
         return phases.tolist(), quality
 
@@ -270,11 +278,7 @@ class AutoAnnotator:
             "errors": [],
         }
 
-        from utils.metrics import compute_scores
-
-        overall_score, details = compute_scores(quality, CONFIG["actions"]["long_jump"])
-        quality["overall_score"] = overall_score
-        quality["details"] = details
+        quality = self._attach_quality_scores(quality, "long_jump")
 
         return phases.tolist(), quality
 
@@ -314,11 +318,7 @@ class AutoAnnotator:
         if max_elbow < 150:
             quality["errors"].append("未充分下放")
 
-        from utils.metrics import compute_scores
-
-        overall_score, details = compute_scores(quality, CONFIG["actions"]["pullup"])
-        quality["overall_score"] = overall_score
-        quality["details"] = details
+        quality = self._attach_quality_scores(quality, "pullup")
 
         return phases.tolist(), quality
 
@@ -340,6 +340,12 @@ class AutoAnnotator:
             quality = {
                 "is_standard": True,
                 "overall_score": 75.0,
+                "metric_scores": {
+                    "accuracy": 75.0,
+                    "stability": 75.0,
+                    "standard": 75.0,
+                    "safety": 75.0,
+                },
                 "errors": [],
                 "note": "使用通用标注",
             }
@@ -388,8 +394,7 @@ class AutoAnnotator:
 
             try:
                 # 加载骨骼
-                with open(json_path) as f:
-                    skeleton_data = json.load(f)
+                skeleton_data, _ = load_json_any(json_path)
 
                 # 转换为numpy
                 sequence = []
@@ -415,10 +420,7 @@ class AutoAnnotator:
                     "reviewed": False,
                 }
 
-                with open(out_path, "w") as f:
-                    json.dump(
-                        to_builtin_types(annotation), f, indent=2, ensure_ascii=False
-                    )
+                save_json_utf8(out_path, to_builtin_types(annotation))
 
                 processed += 1
 
@@ -446,10 +448,16 @@ def main():
     parser = argparse.ArgumentParser(description="自动标注骨骼数据")
     parser.add_argument("--action", type=str, default=None, help="指定标注的动作类型")
     parser.add_argument(
-        "--skeleton_dir", type=str, default=CONFIG["paths"]["skeletons"], help="骨骼数据目录"
+        "--skeleton_dir",
+        type=str,
+        default=CONFIG["paths"]["skeletons"],
+        help="骨骼数据目录",
     )
     parser.add_argument(
-        "--anno_dir", type=str, default=CONFIG["paths"]["annotations"], help="标注输出目录"
+        "--anno_dir",
+        type=str,
+        default=CONFIG["paths"]["annotations"],
+        help="标注输出目录",
     )
     parser.add_argument(
         "--only_files",
@@ -488,7 +496,7 @@ def main():
             )
             total += count
 
-        print(f"\n{'='*50}")
+        print(f"\n{'=' * 50}")
         print(f"全部标注完成！共标注 {total} 个样本")
 
     print(f"\n标注数据保存在: {anno_dir}")

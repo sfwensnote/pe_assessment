@@ -38,7 +38,7 @@ with open(CONFIG_PATH, encoding="utf-8") as f:
     CONFIG = yaml.safe_load(f)
 
 
-VIDEO_EXTENSIONS = ["*.mp4", "*.avi", "*.mov", "*.mkv", "*.webm"]
+VIDEO_EXTENSIONS = {".mp4", ".avi", ".mov", ".mkv", ".webm"}
 
 
 class PreprocessProgressTracker:
@@ -139,15 +139,25 @@ class PreprocessProgressTracker:
 def list_video_files(
     action_input_dir: Path, only_files: Optional[set[str]]
 ) -> list[Path]:
-    video_files: list[Path] = []
-    for ext in VIDEO_EXTENSIONS:
-        video_files.extend(action_input_dir.glob(ext))
+    try:
+        candidates = list(action_input_dir.iterdir())
+    except OSError as exc:
+        print(f"警告: 无法读取目录 {action_input_dir}: {exc}")
+        return []
 
-    values = [
-        p
-        for p in video_files
-        if not p.name.startswith("._") and not p.name.startswith(".")
-    ]
+    values: list[Path] = []
+    for p in candidates:
+        try:
+            if not p.is_file():
+                continue
+            if p.suffix.lower() not in VIDEO_EXTENSIONS:
+                continue
+            if p.name.startswith("._") or p.name.startswith("."):
+                continue
+            values.append(p)
+        except OSError as exc:
+            print(f"警告: 跳过不可读取文件 {p}: {exc}")
+
     if only_files:
         values = [p for p in values if p.name in only_files or p.stem in only_files]
     return sorted(values)
@@ -259,7 +269,7 @@ def process_action(
     error_count = 0
 
     for idx, video_path in enumerate(
-        tqdm(video_files, desc=f"提取 {action_type}"),
+        tqdm(video_files, desc=f"extract {action_type}", ascii=True),
         start=1,
     ):
         out_path = action_output_dir / f"{video_path.stem}.json"
@@ -286,7 +296,9 @@ def process_action(
             )
 
             if skeleton_data["total_frames"] < 10:
-                print(f"  跳过 {video_path.name}: 帧数太少 ({skeleton_data['total_frames']})")
+                print(
+                    f"  跳过 {video_path.name}: 帧数太少 ({skeleton_data['total_frames']})"
+                )
                 skipped_short += 1
             else:
                 with open(out_path, "w", encoding="utf-8") as f:
@@ -307,7 +319,9 @@ def process_action(
                 errors=error_count,
             )
 
-    print(f"完成: 成功 {processed_count} 个, 已存在 {skipped_existing} 个, 失败 {error_count} 个")
+    print(
+        f"完成: 成功 {processed_count} 个, 已存在 {skipped_existing} 个, 失败 {error_count} 个"
+    )
 
     if tracker:
         tracker.update_action(
@@ -357,14 +371,24 @@ def build_actions_state(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="提取视频骨骼关键点")
-    parser.add_argument("--action", type=str, default=None, help="指定处理的动作类型，默认处理所有")
     parser.add_argument(
-        "--input_dir", type=str, default=CONFIG["paths"]["raw_videos"], help="输入视频目录"
+        "--action", type=str, default=None, help="指定处理的动作类型，默认处理所有"
     )
     parser.add_argument(
-        "--output_dir", type=str, default=CONFIG["paths"]["skeletons"], help="输出骨骼目录"
+        "--input_dir",
+        type=str,
+        default=CONFIG["paths"]["raw_videos"],
+        help="输入视频目录",
     )
-    parser.add_argument("--model", type=str, default="yolov8x-pose.pt", help="YOLO模型路径")
+    parser.add_argument(
+        "--output_dir",
+        type=str,
+        default=CONFIG["paths"]["skeletons"],
+        help="输出骨骼目录",
+    )
+    parser.add_argument(
+        "--model", type=str, default="yolov8x-pose.pt", help="YOLO模型路径"
+    )
     parser.add_argument("--conf", type=float, default=0.3, help="关键点置信度阈值")
     parser.add_argument(
         "--only_files",

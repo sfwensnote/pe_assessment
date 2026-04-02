@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Dict, Optional
@@ -12,10 +13,19 @@ import torch
 import torch.nn as nn
 import yaml
 
+try:
+    import joblib
+except ImportError:  # pragma: no cover - optional runtime dependency
+    joblib = None
+
 from app.services.coach_feedback import build_tips
+from utils.action_features import extract_action_summary_features
 from utils.metrics import compute_scores
 from utils.models import QualityNet, STGCNAction, TemporalUNet
 from utils.skeleton import SkeletonProcessor
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+os.environ.setdefault("YOLO_CONFIG_DIR", str(PROJECT_ROOT / ".ultralytics"))
 
 try:
     from ultralytics import YOLO
@@ -39,9 +49,11 @@ class ModelRuntime:
 
     MODEL_CONF_THRESHOLD = 0.65
     RULE_OVERRIDE_THRESHOLD = 0.7
+    DEFAULT_CHECKPOINT_SUBDIR = Path("checkpoints") / "mixed_best_bundle"
+    RF_CONF_THRESHOLD = 0.3
 
     def __init__(self) -> None:
-        root = Path(__file__).resolve().parents[2]
+        root = PROJECT_ROOT
         self.project_root = root
         self.config_path = root / "config.yaml"
 
@@ -68,13 +80,19 @@ class ModelRuntime:
             return
 
         try:
-            self.yolo = YOLO("yolov8x-pose.pt")
+            pose_model = self.config.get("inference", {}).get(
+                "pose_model", "yolov8n-pose.pt"
+            )
+            self.yolo = YOLO(pose_model)
         except Exception:
             self.yolo = None
 
     def _init_models(self) -> None:
-        checkpoint_dir = self.project_root / self.config["paths"]["checkpoints"]
+        checkpoint_dir = self.project_root / self.DEFAULT_CHECKPOINT_SUBDIR
+        if not checkpoint_dir.exists():
+            checkpoint_dir = self.project_root / self.config["paths"]["checkpoints"]
         self.action_model = self._load_action_model(checkpoint_dir)
+        self.action_rf_model = self._load_action_rf_model(checkpoint_dir)
         self.phase_models = self._load_phase_models(checkpoint_dir)
         self.quality_model = self._load_quality_model(checkpoint_dir)
 
@@ -98,6 +116,28 @@ class ModelRuntime:
                 self.action_to_id = checkpoint["action_to_id"]
                 self.id_to_action = {v: k for k, v in self.action_to_id.items()}
 
+            return model
+        except Exception:
+            return None
+
+    def _load_action_rf_model(self, checkpoint_dir: Path):
+        if joblib is None:
+            return None
+
+        model_path = checkpoint_dir / "action_model_rf.joblib"
+        if not model_path.exists():
+            return None
+
+        try:
+            model = joblib.load(model_path)
+            if hasattr(model, "n_jobs"):
+                try:
+                    model.set_params(n_jobs=1)
+                except Exception:
+                    try:
+                        model.n_jobs = 1
+                    except Exception:
+                        pass
             return model
         except Exception:
             return None
@@ -309,34 +349,77 @@ class ModelRuntime:
             skeleton_window, features
         )
 
-        if self.action_model is None:
+        rf_action = None
+        rf_conf = 0.0
+        if self.action_rf_model is not None:
+            rf_action, rf_conf = self._recognize_action_rf(skeleton_window, features)
+
+        if self.action_model is None and rf_action is None:
             return rule_action, rule_conf, "rule_fallback"
 
-        with torch.no_grad():
-            x = torch.FloatTensor(features).unsqueeze(0).to(self.device)
-            logits = self.action_model(x)
-            probs = torch.softmax(logits, dim=1)
-            pred_id = int(logits.argmax(1).item())
+        model_action = None
+        model_conf = 0.0
+        if self.action_model is not None:
+            with torch.no_grad():
+                x = torch.FloatTensor(features).unsqueeze(0).to(self.device)
+                logits = self.action_model(x)
+                probs = torch.softmax(logits, dim=1)
+                pred_id = int(logits.argmax(1).item())
 
-        model_action = self.id_to_action.get(pred_id)
-        if not isinstance(model_action, str):
-            model_action = next(iter(self.config["actions"].keys()))
-        model_conf = float(probs[0, pred_id].item())
+            model_action = self.id_to_action.get(pred_id)
+            if not isinstance(model_action, str):
+                model_action = next(iter(self.config["actions"].keys()))
+            model_conf = float(probs[0, pred_id].item())
+
+        candidates = []
+        if model_action is not None:
+            candidates.append(("model", model_action, model_conf))
+        if rf_action is not None:
+            candidates.append(("rf", rf_action, rf_conf))
+
+        if not candidates:
+            return rule_action, rule_conf, "rule_fallback"
+
+        best_source, best_action, best_conf = max(candidates, key=lambda item: item[2])
+        if rule_conf >= self.RULE_OVERRIDE_THRESHOLD:
+            if best_conf < self.MODEL_CONF_THRESHOLD:
+                return rule_action, max(rule_conf, best_conf), "rule_override"
+            if best_action != rule_action and rule_conf >= best_conf + 0.08:
+                return rule_action, rule_conf, "rule_override"
+            if best_source == "rf" and best_conf < 0.4:
+                return rule_action, max(rule_conf, best_conf), "rule_override"
 
         # 低置信度时启用规则兜底，优先减少明显误判
-        if model_conf < self.MODEL_CONF_THRESHOLD:
-            if rule_conf >= self.RULE_OVERRIDE_THRESHOLD or model_conf < 0.45:
-                return rule_action, max(rule_conf, model_conf), "rule_override"
+        if best_conf < self.MODEL_CONF_THRESHOLD:
+            if rule_conf >= self.RULE_OVERRIDE_THRESHOLD or (
+                best_source == "model" and best_conf < 0.35
+            ):
+                return rule_action, max(rule_conf, best_conf), "rule_override"
 
         # 模型与规则冲突且模型不够稳定时，选择规则结果
         if (
-            model_action != rule_action
-            and model_conf < 0.8
+            best_action != rule_action
+            and best_conf < 0.8
             and rule_conf >= self.RULE_OVERRIDE_THRESHOLD
         ):
-            return rule_action, max(rule_conf, model_conf), "rule_override"
+            return rule_action, max(rule_conf, best_conf), "rule_override"
 
-        return model_action, model_conf, "model"
+        return best_action, best_conf, best_source
+
+    def _recognize_action_rf(
+        self, skeleton_window: np.ndarray, features: np.ndarray
+    ) -> tuple[str, float]:
+        if self.action_rf_model is None:
+            default_action = next(iter(self.config["actions"].keys()))
+            return default_action, 0.0
+
+        vector = extract_action_summary_features(skeleton_window, features).reshape(
+            1, -1
+        )
+        pred = self.action_rf_model.predict(vector)[0]
+        probs = self.action_rf_model.predict_proba(vector)[0]
+        conf = float(np.max(probs)) if len(probs) else 0.0
+        return str(pred), conf
 
     def _recognize_action_by_rules(
         self, skeleton_window: np.ndarray, features: np.ndarray
@@ -486,9 +569,11 @@ class ModelRuntime:
         with torch.no_grad():
             x = torch.FloatTensor(features).unsqueeze(0).to(self.device)
             output = model(x)
-            phases = output.argmax(2)[0].cpu().numpy()
+            phases = output.argmax(-1)[0].cpu().numpy()
 
-        return int(phases[-1])
+        phase_id = int(phases[-1]) if len(phases) else 0
+        phase_count = len(self.config["actions"][action_type]["phases"])
+        return max(0, min(phase_id, phase_count - 1))
 
     @staticmethod
     def _rule_phase(features: np.ndarray, action_type: str) -> int:

@@ -1,146 +1,156 @@
-# AGENTS Guide for `pe_assessment`
-This file is for coding agents working in this repository.
-Follow it when planning, editing, testing, and validating changes.
+# AGENTS.md
+Practical guide for coding agents working in `pe_assessment`.
 
-## 1) Scope and priorities
-- This is a Python project for sports action assessment from video.
-- Main workflow: preprocess -> annotate -> review -> train -> infer -> export.
-- Top-level numbered scripts (`0_` to `7_`) are the primary entrypoints.
-- `utils/` contains core feature extraction, models, augmentation, and metrics.
-- `ultralytics/` is vendored third-party code; treat it as external unless a task requires touching it.
+## 1) Project overview
+- Domain: sports action assessment from video (6动作: pushup/squat/situp/jump_rope/long_jump/pullup).
+- Pipeline: preprocess keypoints -> auto label -> review -> train -> infer -> export.
+- Main backend stack: Python + PyTorch + FastAPI.
+- Main frontend stack: React + TypeScript + Vite (`web/`).
+- Global runtime configuration is centralized in `config.yaml`.
 
-## 2) Rule sources checked
-- Checked `.cursor/rules/`: not present.
-- Checked `.cursorrules`: not present.
-- Checked `.github/copilot-instructions.md`: not present.
-- No Cursor/Copilot rule files are currently available in this repo.
-- If these files are added later, treat them as high-priority project rules.
-
-## 3) Repository map (high value paths)
-- `config.yaml`: global config for actions, training, thresholds, and paths.
-- `0_preprocess_videos.py`: extract skeleton keypoints from raw videos.
-- `1_auto_annotate.py`: rule-based phase and quality auto-labeling.
-- `2_review_annotations.py`: CLI/manual review tool.
+## 2) High-value paths
+- `0_preprocess_videos.py`: video -> skeleton json extraction.
+- `1_auto_annotate.py`: rule-based phase/quality annotation.
+- `2_review_annotations.py`: manual review tool.
 - `3_train_action.py`: action classification training.
 - `4_train_phase.py`: phase segmentation training.
 - `5_train_quality.py`: quality scoring/error detection training.
-- `6_inference.py`: end-to-end video assessment.
-- `7_export_model.py`: export models to ONNX/TorchScript and deploy package.
-- `quick_test.py`: environment + model smoke check.
-- `run_all.sh`: one-shot full pipeline runner.
-- `requirements.txt`: pinned dependencies and dev tools.
+- `6_inference.py`: end-to-end inference on video.
+- `7_export_model.py`: export for deployment.
+- `8_ingest_pipeline.py`: auto ingest/orchestration pipeline.
+- `8_ingest_monitor.py`: ingest progress monitor.
+- `9_tag_and_cleanup_videos.py`: tag + optional cleanup.
+- `app/main.py`: FastAPI realtime/inference APIs.
+- `utils/`: skeleton/model/augmentation/metrics core logic.
+- `web/`: React frontend.
+- `ultralytics/`: vendored upstream code; avoid edits unless task explicitly requires.
 
-## 4) Environment and setup commands
-- Create env (recommended): `python -m venv .venv && source .venv/bin/activate`
-- Install deps: `python -m pip install -r requirements.txt`
-- Smoke-check environment: `python quick_test.py`
-- Verify key imports quickly: `python -c "import torch, cv2, yaml, numpy"`
+## 3) Rule sources checked
+- `.cursor/rules/`: not found.
+- `.cursorrules`: not found.
+- `.github/copilot-instructions.md`: not found.
+- No Cursor/Copilot repo rules exist at the moment.
+- If any are added later, treat them as higher-priority agent instructions.
 
-## 5) Build/train/inference commands
-- Full pipeline (interactive review prompt included): `bash run_all.sh`
+## 4) Environment setup
+- Recommended virtual env:
+  - `python -m venv .venv`
+  - Windows: `.venv\\Scripts\\activate`
+  - Unix: `source .venv/bin/activate`
+- Install dependencies:
+  - `python -m pip install -U pip`
+  - `python -m pip install -r requirements.txt`
+- Quick sanity check:
+  - `python quick_test.py`
+
+## 5) Build / run commands
+
+### Python pipeline
 - Preprocess all actions: `python 0_preprocess_videos.py`
-- Preprocess one action: `python 0_preprocess_videos.py --action pushup`
-- Auto-annotate all: `python 1_auto_annotate.py`
-- Auto-annotate one action: `python 1_auto_annotate.py --action pushup`
-- Review annotations: `python 2_review_annotations.py --action pushup`
+- Preprocess single action: `python 0_preprocess_videos.py --action pushup`
+- Auto annotate: `python 1_auto_annotate.py`
+- Review annotation: `python 2_review_annotations.py --action pushup`
 - Train action model: `python 3_train_action.py --epochs 100 --batch_size 64`
-- Train phase model (all actions): `python 4_train_phase.py --epochs 80`
-- Train phase model (single action): `python 4_train_phase.py --action pushup`
+- Train phase models: `python 4_train_phase.py --epochs 80`
+- Train single phase model: `python 4_train_phase.py --action pushup`
 - Train quality model: `python 5_train_quality.py --epochs 60 --batch_size 32`
-- Inference (auto action detection): `python 6_inference.py --video test.mp4`
-- Inference (force action): `python 6_inference.py --video test.mp4 --action pushup`
-- Inference JSON output: `python 6_inference.py --video test.mp4 --format json --output result.json`
-- Export deploy models (ONNX): `python 7_export_model.py --format onnx`
-- Export deploy models (TorchScript): `python 7_export_model.py --format torchscript`
+- Inference text/json: `python 6_inference.py --video test.mp4 --format json`
+- Export model: `python 7_export_model.py --format onnx`
 
-## 6) Lint and formatting commands
-- Formatter: `black` (listed in `requirements.txt`).
-- Linter: `flake8` (listed in `requirements.txt`).
-- Format core files only: `python -m black *.py utils/*.py`
-- Format check only: `python -m black --check *.py utils/*.py`
-- Lint core files only: `python -m flake8 *.py utils/*.py --max-line-length=88`
-- Do not run repo-wide lint/format over `ultralytics/` unless task explicitly requires it.
+### Ingest/ops scripts
+- Full ingest pipeline: `python 8_ingest_pipeline.py`
+- Ingest selected actions: `python 8_ingest_pipeline.py --actions pushup,squat`
+- Monitor once: `python 8_ingest_monitor.py`
+- Monitor watch mode: `python 8_ingest_monitor.py --watch`
+- Tag only: `python 9_tag_and_cleanup_videos.py`
+- Tag + cleanup: `python 9_tag_and_cleanup_videos.py --cleanup`
 
-## 7) Test commands (current state + usage)
-- `pytest` is installed, but there is no dedicated `tests/` directory yet.
-- Practical validation is currently script-level smoke/integration checks.
-- Primary smoke test: `python quick_test.py`
-- Pipeline-level validation (expensive): run relevant numbered script with small inputs.
+### Backend / frontend
+- Backend dev server: `uvicorn app.main:app --reload --port 8001`
+- Frontend dev:
+  - `cd web`
+  - `npm install`
+  - `npm run dev`
+- Frontend build:
+  - `cd web && npm run build`
 
-### Single-test execution (important)
-- Single test file: `python -m pytest tests/test_file.py -q`
-- Single test function: `python -m pytest tests/test_file.py::test_case_name -q`
-- Keyword-filtered run: `python -m pytest -k "keyword" -q`
-- Stop on first failure: `python -m pytest -x -q`
-- In this repo today, `python quick_test.py` is the nearest single-target check.
+## 6) Lint / format / test commands
 
-## 8) Code style guidelines inferred from codebase
+### Python lint & format
+- Format changed Python files: `python -m black *.py utils/*.py app/**/*.py`
+- Format check: `python -m black --check *.py utils/*.py app/**/*.py`
+- Lint core Python: `python -m flake8 *.py utils/*.py app/**/*.py`
+- Do not run lint/format across `ultralytics/` unless task explicitly needs it.
+
+### Tests
+- Current status: no dedicated `tests/` directory in this repo.
+- Primary validation command: `python quick_test.py`
+- If pytest tests are added later, run all: `python -m pytest -q`
+
+### Run a single test (important)
+- Single file: `python -m pytest -q path/to/test_file.py`
+- Single function: `python -m pytest -q path/to/test_file.py::test_fn`
+- Single class method: `python -m pytest -q path/to/test_file.py::TestClass::test_method`
+- Keyword filter: `python -m pytest -q -k "keyword"`
+- Stop fast on first failure: `python -m pytest -q -x`
+
+## 7) Code style guidelines
 
 ### Imports
-- Group imports in this order: standard library, third-party, local project.
+- Order imports as: stdlib -> third-party -> local.
 - Separate groups with one blank line.
 - Prefer explicit imports; avoid wildcard imports.
-- Keep one import per line, except tightly related typing imports.
-- Top-level runnable scripts often use `sys.path.append(str(Path(__file__).parent))`; preserve this pattern.
+- Keep `utils` imports absolute and stable.
+- Preserve existing script bootstrap patterns when present (e.g., `sys.path.append(...)`).
 
-### Formatting and structure
-- Use 4-space indentation.
-- Keep functions/classes focused; extract helpers for repeated logic.
-- Add a module docstring at file top with purpose and usage.
-- Preserve existing CLI style: `argparse` with clear `--help` text.
-- Prefer `Path` from `pathlib` over manual string path joins.
-- Use `if __name__ == '__main__':` in executable scripts.
+### Formatting
+- 4-space indentation, no tabs.
+- Write Black-friendly code and avoid style-only churn.
+- Keep functions focused; extract helper functions for repeated logic.
+- Keep CLI scripts `argparse`-driven and backwards compatible.
 
-### Types and data contracts
-- Add type hints for public functions/methods and non-trivial returns.
-- Use `Dict`, `List`, `Tuple`, `Optional` (or built-in generics consistently).
-- Keep tensor/array shape assumptions explicit, e.g. `[B, T, N, C]`.
-- Use `np.ndarray` and `torch.Tensor` annotations where appropriate.
-- Return structured dictionaries with stable keys for model outputs/reports.
+### Types
+- Add type hints to public/non-trivial functions.
+- Keep array/tensor shape assumptions explicit in docstrings (`[B, T, N, C]`, `[T, 17, 9]`).
+- Use consistent typing style (`Dict/List/Tuple/Optional` or builtin generics, not mixed randomly).
 
 ### Naming conventions
-- `snake_case` for functions, variables, and local helpers.
-- `PascalCase` for classes.
-- `UPPER_SNAKE_CASE` for constants (`CONFIG_PATH`, `CONFIG`, `ERROR_TYPES`).
-- Keep action IDs lowercase snake_case (`pushup`, `jump_rope`, etc.).
-- Keep script filenames numeric and ordered (`0_...` to `7_...`).
+- `snake_case`: variables/functions/files.
+- `PascalCase`: classes.
+- `UPPER_SNAKE_CASE`: module-level constants.
+- Preserve action keys (`pushup`, `jump_rope`, etc.) and numbered script names (`0_...` to `9_...`).
 
-### Error handling and logging
-- Prefer fail-soft behavior for batch loops: catch per-sample errors, continue, print concise context.
-- Prefer fail-fast behavior for critical setup failures (missing model/dependency).
-- Current style uses `print` and `tqdm` rather than a logging framework.
-- If catching broad `Exception`, include actionable context (file/action/video id).
-- Avoid silent failures; return explicit empty result or clear warning.
+### Error handling
+- Fail fast on critical init issues (missing config/model/dependency).
+- Fail soft for batch processing loops (log and continue per file/sample).
+- Avoid bare `except:`; catch specific exceptions where practical.
+- Error output should include useful context: action type, path, and step name.
 
-### Configuration and constants
-- Centralize tunables and paths in `config.yaml`; avoid hardcoded values when config exists.
-- Load config once near module top in script-style files.
-- Reuse configured paths from `CONFIG['paths']`.
-- Keep action definitions synchronized with `config.yaml` when adding/removing actions.
+### Logging and outputs
+- Existing project style uses `print` + `tqdm`; keep consistency unless refactor is requested.
+- Keep progress logs concise; avoid noisy per-frame or per-iteration spam.
+- For JSON containing Chinese text, keep `ensure_ascii=False` where needed.
 
-### Data/model pipeline expectations
-- Skeleton feature contract is `[T, 17, 9]` after preprocessing.
-- Training scripts expect JSON annotation + skeleton pairs by action directory.
-- Preserve checkpoint key compatibility used by inference/export scripts.
-- Preserve device fallback behavior: prefer CUDA, fallback to CPU.
-- Avoid breaking output JSON schema used by downstream tools.
+### Config/data contracts
+- Read runtime settings from `config.yaml` rather than hardcoding.
+- Respect `CONFIG['paths']` for file locations.
+- Preserve expected schemas for skeleton/annotation/inference JSON outputs.
+- Keep checkpoint filenames compatible with `6_inference.py` and backend runtime loaders.
 
-### Internationalization/content style
-- User-facing messages are mostly Chinese; keep wording consistent in touched files.
-- Keep code identifiers in English.
-- Use `ensure_ascii=False` only where non-ASCII JSON output is intended.
+### Backend/frontend notes
+- Backend APIs should keep response keys stable for `web/src` consumers.
+- For frontend changes, keep TypeScript types aligned with `web/src/types.ts`.
+- Preserve CORS and admin-token behavior unless task explicitly changes security model.
 
-## 9) Agent workflow checklist
-- Read `README.md` and target script(s) before edits.
-- Make minimal, focused changes aligned with existing patterns.
-- Run formatter/linter only on touched core files.
-- Run the lightest meaningful validation command for the change.
-- If training/inference is too expensive, state what was not run and why.
-- Do not modify vendored `ultralytics/` unless explicitly required.
+## 8) Agent workflow checklist
+- Read relevant script/module before editing; follow local conventions.
+- Make minimal, targeted changes.
+- Run the lightest meaningful validation for touched code.
+- State clearly what was/was not validated if full training/inference is too expensive.
+- Do not commit generated artifacts (`.pth`, `.onnx`, videos, ingest outputs, caches).
 
-## 10) Safety notes for automated edits
-- Do not commit large generated artifacts (`.pth`, `.onnx`, data outputs).
-- Respect `.gitignore` entries for checkpoints, deploy models, and raw data.
-- Avoid introducing absolute paths; use config-relative or repo-relative paths.
-- Keep CLI backward compatible where possible; add new args as optional.
-- Prefer additive changes over risky rewrites in training/inference paths.
+## 9) Safety constraints
+- Avoid absolute machine-specific paths in committed code.
+- Keep large binary/model/data files out of git (respect `.gitignore`).
+- Do not modify vendored `ultralytics/` unless explicitly requested.
+- Prefer additive, low-risk edits over broad rewrites in training/inference paths.
